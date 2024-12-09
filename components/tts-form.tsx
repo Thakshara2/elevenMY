@@ -124,7 +124,7 @@ const SpeakerCard = React.forwardRef<
     emphasize: boolean;
   }
 >(({ index, speaker, voices, audioUrl, isLoading, onRegenerate, onRemove, onVoiceChange, onDownload, form, onGenerate, emphasize }, ref) => {
-  const [textareaHeight, setTextareaHeight] = React.useState('100px');
+  const [textareaHeight, setTextareaHeight] = React.useState('200px');
   
   const groupedVoices = React.useMemo(() => 
     voices.reduce((acc, voice) => {
@@ -154,7 +154,7 @@ const SpeakerCard = React.forwardRef<
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
     >
-      <Card ref={ref} className="relative border-2 transition-colors duration-200 hover:border-primary/50">
+      <Card ref={ref} className="relative border-2 transition-colors duration-200 hover:border-primary/50 h-full">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1">
@@ -228,7 +228,7 @@ const SpeakerCard = React.forwardRef<
                       handleTextareaChange(e);
                     }}
                     placeholder="Enter dialogue for this speaker..."
-                    className="min-h-[100px] resize-none transition-all duration-200"
+                    className="min-h-[200px] resize-none transition-all duration-200"
                     value={emphasize ? field.value.toUpperCase() : field.value}
                   />
                 </FormControl>
@@ -764,10 +764,13 @@ export function TTSForm() {
     try {
       setCurrentLoadingSpeaker(line.speaker);
       
-      // Clear previous audio for this speaker
+      // Create a unique key for this specific line
+      const audioKey = `${line.speaker}_${index}`;
+      
+      // Clear previous audio for this specific line
       setAudioUrls(prev => {
         const newUrls = { ...prev };
-        delete newUrls[line.speaker];
+        delete newUrls[audioKey];
         return newUrls;
       });
 
@@ -787,14 +790,10 @@ export function TTSForm() {
       const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       
-      // Cleanup old URL before setting new one
-      if (audioUrls[line.speaker]) {
-        URL.revokeObjectURL(audioUrls[line.speaker]);
-      }
-
+      // Use the unique key when storing the URL
       setAudioUrls(prev => ({
         ...prev,
-        [line.speaker]: url
+        [audioKey]: url
       }));
 
       toast({
@@ -846,7 +845,7 @@ export function TTSForm() {
   return (
     <TooltipProvider>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
           <div className="flex flex-col space-y-4">
             <FormField
               control={form.control}
@@ -1044,7 +1043,7 @@ export function TTSForm() {
                         <Textarea
                           {...field}
                           placeholder="Enter text to convert to speech..."
-                          className="min-h-[100px] resize-none"
+                          className="min-h-[200px] resize-none"
                           value={form.watch('emphasize') ? field.value?.toUpperCase() : field.value}
                         />
                       </FormControl>
@@ -1155,14 +1154,14 @@ export function TTSForm() {
                   </Button>
                 </div>
 
-                <div className="grid gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {form.watch('script')?.map((line: any, index: number) => (
                     <SpeakerCard
                       key={index}
                       index={index}
                       speaker={line}
                       voices={voices}
-                      audioUrl={audioUrls[line.speaker]}
+                      audioUrl={audioUrls[`${line.speaker}_${index}`]}
                       isLoading={currentLoadingSpeaker === line.speaker}
                       onRegenerate={() => handleRegenerate(line, index)}
                       onRemove={() => handleRemoveSpeaker(index)}
