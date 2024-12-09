@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { type Voice } from '@/types/voice';
-import { getVoices, generateSpeech } from '@/lib/elevenlabs';
+import { getVoices, generateSpeech, getUsageStats } from '@/lib/elevenlabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
   TooltipProvider
 } from "@/components/ui/tooltip";
+import { Progress } from '@/components/ui/progress';
 
 declare global {
   interface Window {
@@ -448,6 +449,10 @@ export function TTSForm() {
   const { toast } = useToast();
   const [savedApiKey, setSavedApiKey] = useState<string>('');
   const [currentLoadingSpeaker, setCurrentLoadingSpeaker] = useState<string | null>(null);
+  const [usageStats, setUsageStats] = useState<{
+    character_count: number;
+    character_limit: number;
+  } | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -467,6 +472,7 @@ export function TTSForm() {
       setSavedApiKey(storedApiKey);
       form.setValue('apiKey', storedApiKey);
       loadVoices(storedApiKey);
+      loadUsageStats(storedApiKey);
     }
   }, []);
 
@@ -974,6 +980,15 @@ export function TTSForm() {
     }
   }
 
+  const loadUsageStats = async (apiKey: string) => {
+    try {
+      const stats = await getUsageStats(apiKey);
+      setUsageStats(stats);
+    } catch (error) {
+      console.error('Failed to load usage stats:', error);
+    }
+  };
+
   return (
     <TooltipProvider>
       <Form {...form}>
@@ -995,6 +1010,7 @@ export function TTSForm() {
                         onChange={(e) => {
                           field.onChange(e);
                           loadVoices(e.target.value);
+                          loadUsageStats(e.target.value);
                         }}
                       />
                     </FormControl>
@@ -1047,6 +1063,31 @@ export function TTSForm() {
                 </FormItem>
               )}
             />
+            
+            {usageStats && (
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium">Characters Remaining</h4>
+                  <div className="flex items-center gap-2">
+                    <Progress 
+                      value={(usageStats.character_count / usageStats.character_limit) * 100} 
+                      className="w-[120px]"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {Math.round((usageStats.character_count / usageStats.character_limit) * 100)}% used
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">
+                    {(usageStats.character_limit - usageStats.character_count).toLocaleString()} remaining
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {usageStats.character_count.toLocaleString()} / {usageStats.character_limit.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Tabs defaultValue="single" onValueChange={(value) => form.setValue('mode', value as 'single' | 'multiple')}>

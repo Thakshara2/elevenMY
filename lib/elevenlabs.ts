@@ -56,3 +56,25 @@ export async function generateSpeech(
 
   return response.arrayBuffer();
 }
+
+export async function getUsageStats(apiKey: string) {
+  const response = await fetch(
+    `${ELEVENLABS_API_URL}/user/subscription`, 
+    {
+      headers: {
+        'Accept': 'application/json',
+        'xi-api-key': apiKey,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch usage stats');
+  }
+
+  const data = await response.json();
+  return {
+    character_count: data.character_count,
+    character_limit: data.character_limit,
+  };
+}
