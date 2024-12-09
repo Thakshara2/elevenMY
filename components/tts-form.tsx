@@ -88,11 +88,21 @@ const API_KEY_STORAGE_KEY = 'elevenlabs_api_key';
 
 const groupVoicesByCategory = (voices: Voice[]) => {
   return voices.reduce((acc, voice) => {
-    const category = voice.category || 'Other';
+    const isLegacy = voice.name.toLowerCase().includes('legacy');
+    const category = isLegacy ? 'Legacy Voices' : (voice.category || 'Other');
+    
     if (!acc[category]) {
       acc[category] = [];
     }
-    acc[category].push(voice);
+    acc[category].push({
+      ...voice,
+      labels: {
+        ...voice.labels,
+        gender: voice.labels?.gender || 'unknown',
+        age: voice.labels?.age || 'unknown',
+        accent: voice.labels?.accent || 'unknown',
+      }
+    });
     return acc;
   }, {} as Record<string, Voice[]>);
 };
@@ -262,6 +272,7 @@ const SpeakerCard = React.forwardRef<
                               const gender = voice.labels?.gender?.toLowerCase();
                               const age = voice.labels?.age;
                               const accent = voice.labels?.accent;
+                              const isLegacy = category === 'Legacy Voices';
                               
                               return (
                                 <SelectItem 
@@ -278,13 +289,14 @@ const SpeakerCard = React.forwardRef<
                                           className={cn(
                                             "text-xs px-1 py-0",
                                             gender === "male" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
-                                            gender === "female" && "bg-pink-500/10 text-pink-500 border-pink-500/20"
+                                            gender === "female" && "bg-pink-500/10 text-pink-500 border-pink-500/20",
+                                            isLegacy && "bg-orange-500/10 text-orange-500 border-orange-500/20"
                                           )}
                                         >
-                                          {gender}
+                                          {isLegacy ? "Legacy" : gender}
                                         </Badge>
                                       )}
-                                      {(age || accent) && (
+                                      {(age || accent || voice.description) && (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <BadgeInfo className="h-3 w-3 text-muted-foreground" />
@@ -292,9 +304,37 @@ const SpeakerCard = React.forwardRef<
                                           <TooltipContent className="space-y-1">
                                             {age && <p className="text-sm">Age: {age}</p>}
                                             {accent && <p className="text-sm">Accent: {accent}</p>}
+                                            {voice.description && (
+                                              <p className="text-sm">Description: {voice.description}</p>
+                                            )}
+                                            {isLegacy && (
+                                              <p className="text-sm text-orange-500">
+                                                Legacy voice - May have limited model support
+                                              </p>
+                                            )}
                                           </TooltipContent>
                                         </Tooltip>
                                       )}
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            className="h-6 w-6 p-0"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              const audio = new Audio(voice.preview_url);
+                                              audio.play();
+                                            }}
+                                          >
+                                            <Volume2 className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-sm">Preview voice</p>
+                                        </TooltipContent>
+                                      </Tooltip>
                                     </div>
                                   </div>
                                 </SelectItem>
@@ -781,6 +821,27 @@ export function TTSForm() {
     };
   }, []);
 
+  const groupedVoices = React.useMemo(() => {
+    return voices.reduce((acc, voice) => {
+      const isLegacy = voice.name.toLowerCase().includes('legacy');
+      const category = isLegacy ? 'Legacy Voices' : (voice.category || 'Other');
+      
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push({
+        ...voice,
+        labels: {
+          ...voice.labels,
+          gender: voice.labels?.gender || 'unknown',
+          age: voice.labels?.age || 'unknown',
+          accent: voice.labels?.accent || 'unknown',
+        }
+      });
+      return acc;
+    }, {} as Record<string, Voice[]>);
+  }, [voices]);
+
   return (
     <TooltipProvider>
       <Form {...form}>
@@ -862,117 +923,135 @@ export function TTSForm() {
               <TabsTrigger value="multiple">Multiple Speakers</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="single">
-              <FormField
-                control={form.control}
-                name="voiceId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Voice</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+            <TabsContent value="single" className="space-y-6">
+              <div className="grid gap-6">
+                <FormField
+                  control={form.control}
+                  name="voiceId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Voice Selection</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger 
+                            className={cn(
+                              "transition-colors duration-200",
+                              !field.value && "border-destructive",
+                              field.value && "border-green-500"
+                            )}
+                          >
+                            <SelectValue placeholder="Select a voice" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.entries(groupedVoices).map(([category, categoryVoices]) => (
+                            <SelectGroup key={category}>
+                              <SelectLabel className="font-semibold text-primary">
+                                {category}
+                              </SelectLabel>
+                              {categoryVoices.map((voice) => {
+                                const gender = voice.labels?.gender?.toLowerCase();
+                                const age = voice.labels?.age;
+                                const accent = voice.labels?.accent;
+                                const isLegacy = category === 'Legacy Voices';
+                                
+                                return (
+                                  <SelectItem 
+                                    key={voice.voice_id} 
+                                    value={voice.voice_id}
+                                    className="cursor-pointer hover:bg-accent relative pr-12"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span>{voice.name}</span>
+                                      <div className="flex items-center gap-1">
+                                        {gender && (
+                                          <Badge 
+                                            variant="outline" 
+                                            className={cn(
+                                              "text-xs px-1 py-0",
+                                              gender === "male" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
+                                              gender === "female" && "bg-pink-500/10 text-pink-500 border-pink-500/20",
+                                              isLegacy && "bg-orange-500/10 text-orange-500 border-orange-500/20"
+                                            )}
+                                          >
+                                            {isLegacy ? "Legacy" : gender}
+                                          </Badge>
+                                        )}
+                                        {(age || accent || voice.description) && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <BadgeInfo className="h-3 w-3 text-muted-foreground" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="space-y-1">
+                                              {age && <p className="text-sm">Age: {age}</p>}
+                                              {accent && <p className="text-sm">Accent: {accent}</p>}
+                                              {voice.description && (
+                                                <p className="text-sm">Description: {voice.description}</p>
+                                              )}
+                                              {isLegacy && (
+                                                <p className="text-sm text-orange-500">
+                                                  Legacy voice - May have limited model support
+                                                </p>
+                                              )}
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm"
+                                              className="h-6 w-6 p-0"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const audio = new Audio(voice.preview_url);
+                                                audio.play();
+                                              }}
+                                            >
+                                              <Volume2 className="h-3 w-3" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="text-sm">Preview voice</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </div>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="text"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Text</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a voice" />
-                        </SelectTrigger>
+                        <Textarea
+                          {...field}
+                          placeholder="Enter text to convert to speech..."
+                          className="min-h-[100px] resize-none"
+                          value={form.watch('emphasize') ? field.value?.toUpperCase() : field.value}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {Object.entries(groupVoicesByCategory(voices)).map(([category, categoryVoices]) => (
-                          <SelectGroup key={category}>
-                            <SelectLabel>{category}</SelectLabel>
-                            {categoryVoices.map((voice) => (
-                              <SelectItem key={voice.voice_id} value={voice.voice_id}>
-                                {voice.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="model"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Model</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a model" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="eleven_multilingual_v2">Multilingual V2 (Best Quality)</SelectItem>
-                        <SelectItem value="eleven_monolingual_v1">Monolingual V1 (Faster)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Choose between higher quality or faster generation
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="text"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Text</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Enter the text you want to convert to speech"
-                        className="h-32"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="emphasize"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Emphasize</FormLabel>
-                      <FormDescription>
-                        Transform text to uppercase to make the voice louder
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              {audioUrls['single'] && (
-                <div className="flex items-center gap-4 pt-2">
-                  <audio controls className="flex-1">
-                    <source src={audioUrls['single']} type="audio/mpeg" />
-                  </audio>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleDownloadSingle('single')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="multiple">

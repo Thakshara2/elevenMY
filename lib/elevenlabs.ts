@@ -3,7 +3,7 @@ import { type Voice } from '@/types/voice';
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
 export async function getVoices(apiKey: string): Promise<Voice[]> {
-  const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+  const response = await fetch('https://api.elevenlabs.io/v1/voices?show_legacy=true', {
     headers: {
       'Accept': 'application/json',
       'xi-api-key': apiKey,
