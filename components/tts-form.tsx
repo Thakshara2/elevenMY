@@ -539,7 +539,42 @@ export function TTSForm() {
     try {
       setIsLoading(true);
       
-      if (values.mode === 'multiple') {
+      if (values.mode === 'single') {
+        if (!values.text || !values.voiceId) {
+          toast({
+            title: 'Error',
+            description: 'Please enter text and select a voice for single mode',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        // Clean up previous audio URL
+        if (audioUrls.single) {
+          URL.revokeObjectURL(audioUrls.single);
+        }
+
+        const processedText = values.emphasize ? values.text.toUpperCase() : values.text;
+        const audioBuffer = await generateSpeech(
+          processedText,
+          values.voiceId,
+          values.apiKey,
+          0.5, // Default stability
+          1.0, // Default speed
+          values.model,
+          true, // Default speakerBoost
+          0 // Default style
+        );
+        
+        const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        setAudioUrls(prev => ({ ...prev, single: url }));
+
+        toast({
+          title: 'Success',
+          description: 'Speech generated successfully',
+        });
+      } else {
         if (!values.script?.length) {
           toast({
             title: 'Error',
@@ -1150,6 +1185,25 @@ export function TTSForm() {
                 />
               </div>
 
+              <div className="flex justify-end mt-4">
+                <Button 
+                  type="submit" 
+                  disabled={isLoading || !form.watch('text') || !form.watch('voiceId')}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="mr-2 h-4 w-4" />
+                      Generate Speech
+                    </>
+                  )}
+                </Button>
+              </div>
+
               {audioUrls.single && (
                 <div className="flex items-center gap-4 mt-4">
                   <audio
@@ -1288,39 +1342,36 @@ export function TTSForm() {
             </TabsContent>
           </Tabs>
 
-          <div className="flex justify-between mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDownloadAll}
-              disabled={isLoading || !form.watch('script')?.length}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download All Merged
-            </Button>
+          {form.watch('mode') === 'multiple' && (
+            <div className="flex justify-between mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadAll}
+                disabled={isLoading || !form.watch('script')?.length}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download All Merged
+              </Button>
 
-            <Button 
-              type="submit" 
-              disabled={isLoading || !form.watch('script')?.length}
-              onClick={() => {
-                if (form.watch('mode') === 'multiple') {
-                  form.handleSubmit(onSubmit)();
-                }
-              }}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating All...
-                </>
-              ) : (
-                <>
-                  <Volume2 className="mr-2 h-4 w-4" />
-                  Generate All
-                </>
-              )}
-            </Button>
-          </div>
+              <Button 
+                type="submit" 
+                disabled={isLoading || !form.watch('script')?.length}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating All...
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="mr-2 h-4 w-4" />
+                    Generate All
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </form>
       </Form>
     </TooltipProvider>
