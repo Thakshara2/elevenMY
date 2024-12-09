@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { type Voice } from '@/types/voice';
-import { getVoices, generateSpeech, getUsageStats } from '@/lib/elevenlabs';
+import { getVoices, generateSpeech } from '@/lib/elevenlabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -43,7 +43,7 @@ import {
   TooltipTrigger,
   TooltipProvider
 } from "@/components/ui/tooltip";
-import { Progress } from '@/components/ui/progress';
+import { UsageStats } from '@/components/usage-stats';
 
 declare global {
   interface Window {
@@ -449,10 +449,6 @@ export function TTSForm() {
   const { toast } = useToast();
   const [savedApiKey, setSavedApiKey] = useState<string>('');
   const [currentLoadingSpeaker, setCurrentLoadingSpeaker] = useState<string | null>(null);
-  const [usageStats, setUsageStats] = useState<{
-    character_count: number;
-    character_limit: number;
-  } | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -472,7 +468,6 @@ export function TTSForm() {
       setSavedApiKey(storedApiKey);
       form.setValue('apiKey', storedApiKey);
       loadVoices(storedApiKey);
-      loadUsageStats(storedApiKey);
     }
   }, []);
 
@@ -930,7 +925,7 @@ export function TTSForm() {
   }, [voices]);
 
   // Add helper function for WAV conversion
-  function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  function audioBufferToWav(buffer: AudioBuffer) {
     const numChannels = 1;
     const sampleRate = buffer.sampleRate;
     const format = 1; // PCM
@@ -980,114 +975,82 @@ export function TTSForm() {
     }
   }
 
-  const loadUsageStats = async (apiKey: string) => {
-    try {
-      const stats = await getUsageStats(apiKey);
-      setUsageStats(stats);
-    } catch (error) {
-      console.error('Failed to load usage stats:', error);
-    }
-  };
-
   return (
     <TooltipProvider>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
           <div className="flex flex-col space-y-4">
-            <FormField
-              control={form.control}
-              name="apiKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>ElevenLabs API Key</FormLabel>
-                  <div className="flex gap-2">
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="password"
-                        placeholder="Enter your API key"
-                        className="flex-1"
-                        onChange={(e) => {
-                          field.onChange(e);
-                          loadVoices(e.target.value);
-                          loadUsageStats(e.target.value);
-                        }}
-                      />
-                    </FormControl>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        const apiKey = form.getValues('apiKey');
-                        if (apiKey) {
-                          localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-                          setSavedApiKey(apiKey);
-                          toast({
-                            title: 'Success',
-                            description: 'API key saved successfully!',
-                          });
-                        }
-                      }}
-                    >
-                      Save Key
-                    </Button>
-                    {savedApiKey && (
+            <div className="grid gap-6 md:grid-cols-[2fr,1fr]">
+              <FormField
+                control={form.control}
+                name="apiKey"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>ElevenLabs API Key</FormLabel>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="Enter your API key"
+                          className="flex-1"
+                          onChange={(e) => {
+                            field.onChange(e);
+                            loadVoices(e.target.value);
+                          }}
+                        />
+                      </FormControl>
                       <Button
                         type="button"
                         variant="outline"
-                        className="text-destructive"
                         onClick={() => {
-                          localStorage.removeItem(API_KEY_STORAGE_KEY);
-                          setSavedApiKey('');
-                          form.setValue('apiKey', '');
-                          toast({
-                            title: 'Success',
-                            description: 'API key removed successfully!',
-                          });
+                          const apiKey = form.getValues('apiKey');
+                          if (apiKey) {
+                            localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+                            setSavedApiKey(apiKey);
+                            toast({
+                              title: 'Success',
+                              description: 'API key saved successfully!',
+                            });
+                          }
                         }}
                       >
-                        Clear
+                        Save Key
                       </Button>
-                    )}
-                  </div>
-                  <FormDescription>
-                    {savedApiKey ? (
-                      <span className="text-green-600 dark:text-green-400">
-                        ✓ API key is saved
-                      </span>
-                    ) : (
-                      'Enter your ElevenLabs API key to save it for future use'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            {usageStats && (
-              <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
-                <div className="space-y-1">
-                  <h4 className="text-sm font-medium">Characters Remaining</h4>
-                  <div className="flex items-center gap-2">
-                    <Progress 
-                      value={(usageStats.character_count / usageStats.character_limit) * 100} 
-                      className="w-[120px]"
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {Math.round((usageStats.character_count / usageStats.character_limit) * 100)}% used
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">
-                    {(usageStats.character_limit - usageStats.character_count).toLocaleString()} remaining
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {usageStats.character_count.toLocaleString()} / {usageStats.character_limit.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            )}
+                      {savedApiKey && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="text-destructive"
+                          onClick={() => {
+                            localStorage.removeItem(API_KEY_STORAGE_KEY);
+                            setSavedApiKey('');
+                            form.setValue('apiKey', '');
+                            toast({
+                              title: 'Success',
+                              description: 'API key removed successfully!',
+                            });
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                    <FormDescription>
+                      {savedApiKey ? (
+                        <span className="text-green-600 dark:text-green-400">
+                          ✓ API key is saved
+                        </span>
+                      ) : (
+                        'Enter your ElevenLabs API key to save it for future use'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <UsageStats apiKey={form.getValues('apiKey')} />
+            </div>
           </div>
 
           <Tabs defaultValue="single" onValueChange={(value) => form.setValue('mode', value as 'single' | 'multiple')}>
