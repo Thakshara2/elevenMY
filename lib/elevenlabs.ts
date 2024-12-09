@@ -3,8 +3,9 @@ import { type Voice } from '@/types/voice';
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
 export async function getVoices(apiKey: string): Promise<Voice[]> {
-  const response = await fetch(`${ELEVENLABS_API_URL}/voices`, {
+  const response = await fetch('https://api.elevenlabs.io/v1/voices', {
     headers: {
+      'Accept': 'application/json',
       'xi-api-key': apiKey,
     },
   });
@@ -21,9 +22,11 @@ export async function generateSpeech(
   text: string,
   voiceId: string,
   apiKey: string,
-  stability?: number,
-  speed?: number,
-  model: string = 'eleven_multilingual_v2'
+  stability: number,
+  speed: number,
+  modelId: string = 'eleven_multilingual_v2',
+  speakerBoost: boolean = true,
+  style: number = 0,
 ) {
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -35,13 +38,13 @@ export async function generateSpeech(
       },
       body: JSON.stringify({
         text,
-        model_id: model,
+        model_id: modelId,
         voice_settings: {
-          stability: stability || 0.5,
+          stability,
           similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true,
-          speed: speed || 1,
+          style,
+          use_speaker_boost: speakerBoost,
+          speed,
         },
       }),
     }
@@ -51,5 +54,5 @@ export async function generateSpeech(
     throw new Error('Failed to generate speech');
   }
 
-  return await response.arrayBuffer();
+  return response.arrayBuffer();
 }

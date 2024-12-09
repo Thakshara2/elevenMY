@@ -63,6 +63,8 @@ const formSchema = z.object({
     voiceId: z.string(),
     stability: z.number().min(0).max(1).default(0.5),
     speed: z.number().min(0.5).max(2).default(1),
+    speakerBoost: z.boolean().default(true),
+    style: z.number().min(0).max(1).default(0),
   })).optional(),
 }).refine((data) => {
   if (data.mode === 'single') {
@@ -460,6 +462,8 @@ export function TTSForm() {
         voiceId: speakerVoices[speakerName] || '',
         stability: 0.5,
         speed: 1,
+        speakerBoost: true,
+        style: 0,
       };
     });
 
@@ -498,9 +502,11 @@ export function TTSForm() {
           processedText,
           values.voiceId,
           values.apiKey,
-          undefined,
-          undefined,
-          values.model
+          0.5,
+          1.0,
+          values.model,
+          true,
+          0
         );
         
         const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
@@ -702,6 +708,8 @@ export function TTSForm() {
         voiceId: '',
         stability: 0.5,
         speed: 1,
+        speakerBoost: true,
+        style: 0,
       },
     ]);
   };
@@ -729,7 +737,10 @@ export function TTSForm() {
         line.voiceId,
         form.getValues('apiKey'),
         line.stability,
-        line.speed
+        line.speed,
+        form.getValues('model'),
+        line.speakerBoost,
+        line.style
       );
       
       const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
