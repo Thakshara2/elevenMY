@@ -930,7 +930,7 @@ export function TTSForm() {
   }, [voices]);
 
   // Add helper function for WAV conversion
-  function audioBufferToWav(buffer: AudioBuffer) {
+  function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
     const numChannels = 1;
     const sampleRate = buffer.sampleRate;
     const format = 1; // PCM
