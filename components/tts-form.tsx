@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Volume2, Upload, Download, RefreshCcw, X, Plus } from 'lucide-react';
+import { Loader2, Volume2, Upload, Download, RefreshCcw, X, Plus, BadgeInfo } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider
+} from "@/components/ui/tooltip";
 
 declare global {
   interface Window {
@@ -250,19 +256,53 @@ const SpeakerCard = React.forwardRef<
                             <SelectLabel className="font-semibold text-primary">
                               {category}
                             </SelectLabel>
-                            {voices.map((voice) => (
-                              <SelectItem 
-                                key={voice.voice_id} 
-                                value={voice.voice_id}
-                                className="cursor-pointer hover:bg-accent"
-                              >
-                                {voice.name}
-                              </SelectItem>
-                            ))}
+                            {voices.map((voice) => {
+                              const gender = voice.labels?.gender?.toLowerCase();
+                              const age = voice.labels?.age;
+                              const accent = voice.labels?.accent;
+                              
+                              return (
+                                <SelectItem 
+                                  key={voice.voice_id} 
+                                  value={voice.voice_id}
+                                  className="cursor-pointer hover:bg-accent relative pr-12"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{voice.name}</span>
+                                    <div className="flex items-center gap-1">
+                                      {gender && (
+                                        <Badge 
+                                          variant="outline" 
+                                          className={cn(
+                                            "text-xs px-1 py-0",
+                                            gender === "male" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
+                                            gender === "female" && "bg-pink-500/10 text-pink-500 border-pink-500/20"
+                                          )}
+                                        >
+                                          {gender}
+                                        </Badge>
+                                      )}
+                                      {(age || accent) && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <BadgeInfo className="h-3 w-3 text-muted-foreground" />
+                                          </TooltipTrigger>
+                                          <TooltipContent className="space-y-1">
+                                            {age && <p className="text-sm">Age: {age}</p>}
+                                            {accent && <p className="text-sm">Accent: {accent}</p>}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </div>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectGroup>
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -731,338 +771,340 @@ export function TTSForm() {
   }, []);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="flex flex-col space-y-4">
-          <FormField
-            control={form.control}
-            name="apiKey"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>ElevenLabs API Key</FormLabel>
-                <div className="flex gap-2">
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="password"
-                      placeholder="Enter your API key"
-                      className="flex-1"
-                      onChange={(e) => {
-                        field.onChange(e);
-                        loadVoices(e.target.value);
-                      }}
-                    />
-                  </FormControl>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const apiKey = form.getValues('apiKey');
-                      if (apiKey) {
-                        localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-                        setSavedApiKey(apiKey);
-                        toast({
-                          title: 'Success',
-                          description: 'API key saved successfully!',
-                        });
-                      }
-                    }}
-                  >
-                    Save Key
-                  </Button>
-                  {savedApiKey && (
+    <TooltipProvider>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="flex flex-col space-y-4">
+            <FormField
+              control={form.control}
+              name="apiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>ElevenLabs API Key</FormLabel>
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="password"
+                        placeholder="Enter your API key"
+                        className="flex-1"
+                        onChange={(e) => {
+                          field.onChange(e);
+                          loadVoices(e.target.value);
+                        }}
+                      />
+                    </FormControl>
                     <Button
                       type="button"
                       variant="outline"
-                      className="text-destructive"
                       onClick={() => {
-                        localStorage.removeItem(API_KEY_STORAGE_KEY);
-                        setSavedApiKey('');
-                        form.setValue('apiKey', '');
-                        toast({
-                          title: 'Success',
-                          description: 'API key removed successfully!',
-                        });
+                        const apiKey = form.getValues('apiKey');
+                        if (apiKey) {
+                          localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+                          setSavedApiKey(apiKey);
+                          toast({
+                            title: 'Success',
+                            description: 'API key saved successfully!',
+                          });
+                        }
                       }}
                     >
-                      Clear
+                      Save Key
                     </Button>
-                  )}
-                </div>
-                <FormDescription>
-                  {savedApiKey ? (
-                    <span className="text-green-600 dark:text-green-400">
-                      ✓ API key is saved
-                    </span>
-                  ) : (
-                    'Enter your ElevenLabs API key to save it for future use'
-                  )}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <Tabs defaultValue="single" onValueChange={(value) => form.setValue('mode', value as 'single' | 'multiple')}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="single">Single Voice</TabsTrigger>
-            <TabsTrigger value="multiple">Multiple Speakers</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="single">
-            <FormField
-              control={form.control}
-              name="voiceId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Voice</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a voice" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.entries(groupVoicesByCategory(voices)).map(([category, categoryVoices]) => (
-                        <SelectGroup key={category}>
-                          <SelectLabel>{category}</SelectLabel>
-                          {categoryVoices.map((voice) => (
-                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
-                              {voice.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="model"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Model</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a model" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="eleven_multilingual_v2">Multilingual V2 (Best Quality)</SelectItem>
-                      <SelectItem value="eleven_monolingual_v1">Monolingual V1 (Faster)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {savedApiKey && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="text-destructive"
+                        onClick={() => {
+                          localStorage.removeItem(API_KEY_STORAGE_KEY);
+                          setSavedApiKey('');
+                          form.setValue('apiKey', '');
+                          toast({
+                            title: 'Success',
+                            description: 'API key removed successfully!',
+                          });
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                   <FormDescription>
-                    Choose between higher quality or faster generation
+                    {savedApiKey ? (
+                      <span className="text-green-600 dark:text-green-400">
+                        ✓ API key is saved
+                      </span>
+                    ) : (
+                      'Enter your ElevenLabs API key to save it for future use'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+          </div>
 
-            <FormField
-              control={form.control}
-              name="text"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Text</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Enter the text you want to convert to speech"
-                      className="h-32"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <Tabs defaultValue="single" onValueChange={(value) => form.setValue('mode', value as 'single' | 'multiple')}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="single">Single Voice</TabsTrigger>
+              <TabsTrigger value="multiple">Multiple Speakers</TabsTrigger>
+            </TabsList>
 
-            <FormField
-              control={form.control}
-              name="emphasize"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">Emphasize</FormLabel>
+            <TabsContent value="single">
+              <FormField
+                control={form.control}
+                name="voiceId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Voice</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a voice" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.entries(groupVoicesByCategory(voices)).map(([category, categoryVoices]) => (
+                          <SelectGroup key={category}>
+                            <SelectLabel>{category}</SelectLabel>
+                            {categoryVoices.map((voice) => (
+                              <SelectItem key={voice.voice_id} value={voice.voice_id}>
+                                {voice.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="model"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Model</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a model" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="eleven_multilingual_v2">Multilingual V2 (Best Quality)</SelectItem>
+                        <SelectItem value="eleven_monolingual_v1">Monolingual V1 (Faster)</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormDescription>
-                      Transform text to uppercase to make the voice louder
+                      Choose between higher quality or faster generation
                     </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {audioUrls['single'] && (
-              <div className="flex items-center gap-4 pt-2">
-                <audio controls className="flex-1">
-                  <source src={audioUrls['single']} type="audio/mpeg" />
-                </audio>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleDownloadSingle('single')}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </TabsContent>
+              <FormField
+                control={form.control}
+                name="text"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Text</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Enter the text you want to convert to speech"
+                        className="h-32"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <TabsContent value="multiple">
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <FormField
-                  control={form.control}
-                  name="model"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Model</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a model" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="eleven_multilingual_v2">
-                            Multilingual V2 (Best Quality)
-                          </SelectItem>
-                          <SelectItem value="eleven_monolingual_v1">
-                            Monolingual V1 (Faster)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+              <FormField
+                control={form.control}
+                name="emphasize"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Emphasize</FormLabel>
                       <FormDescription>
-                        Choose between higher quality or faster generation
+                        Transform text to uppercase to make the voice louder
                       </FormDescription>
-                    </FormItem>
-                  )}
-                />
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
 
-                <FormField
-                  control={form.control}
-                  name="emphasize"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">Emphasize All</FormLabel>
-                          <FormDescription>
-                            Transform all text to uppercase to make voices louder
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Input
-                  type="file"
-                  accept=".txt"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="script-upload"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('script-upload')?.click()}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Script
-                </Button>
-                <Button type="button" variant="outline" onClick={handleAddSpeaker}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Speaker
-                </Button>
-              </div>
-
-              <div className="grid gap-6">
-                {form.watch('script')?.map((line: any, index: number) => (
-                  <SpeakerCard
-                    key={index}
-                    index={index}
-                    speaker={line}
-                    voices={voices}
-                    audioUrl={audioUrls[line.speaker]}
-                    isLoading={currentLoadingSpeaker === line.speaker}
-                    onRegenerate={() => handleRegenerate(line, index)}
-                    onRemove={() => handleRemoveSpeaker(index)}
-                    onVoiceChange={(voiceId) => handleVoiceChange(line.speaker, voiceId)}
-                    onGenerate={() => handleGenerateSingle(line, index)}
-                    onDownload={handleDownloadSingle}
-                    emphasize={form.watch('emphasize')}
-                    form={form}
-                  />
-                ))}
-              </div>
-
-              {(form.watch('script')?.length ?? 0) > 0 && (
-                <div className="flex justify-end gap-4">
+              {audioUrls['single'] && (
+                <div className="flex items-center gap-4 pt-2">
+                  <audio controls className="flex-1">
+                    <source src={audioUrls['single']} type="audio/mpeg" />
+                  </audio>
+                  
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleDownloadAll}
-                    disabled={isLoading || !form.watch('script')?.some(line => audioUrls[line.speaker])}
+                    size="icon"
+                    onClick={() => handleDownloadSingle('single')}
                   >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download All Merged
+                    <Download className="h-4 w-4" />
                   </Button>
                 </div>
               )}
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
 
-        <div className="flex justify-between mt-6">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleDownloadAll}
-            disabled={isLoading || !form.watch('script')?.length}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download All Merged
-          </Button>
+            <TabsContent value="multiple">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <FormField
+                    control={form.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormLabel>Model</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a model" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="eleven_multilingual_v2">
+                              Multilingual V2 (Best Quality)
+                            </SelectItem>
+                            <SelectItem value="eleven_monolingual_v1">
+                              Monolingual V1 (Faster)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Choose between higher quality or faster generation
+                        </FormDescription>
+                      </FormItem>
+                    )}
+                  />
 
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Volume2 className="mr-2 h-4 w-4" />
-                Generate Speech
-              </>
-            )}
-          </Button>
-        </div>
-      </form>
-    </Form>
+                  <FormField
+                    control={form.control}
+                    name="emphasize"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">Emphasize All</FormLabel>
+                            <FormDescription>
+                              Transform all text to uppercase to make voices louder
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept=".txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="script-upload"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('script-upload')?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Script
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleAddSpeaker}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Speaker
+                  </Button>
+                </div>
+
+                <div className="grid gap-6">
+                  {form.watch('script')?.map((line: any, index: number) => (
+                    <SpeakerCard
+                      key={index}
+                      index={index}
+                      speaker={line}
+                      voices={voices}
+                      audioUrl={audioUrls[line.speaker]}
+                      isLoading={currentLoadingSpeaker === line.speaker}
+                      onRegenerate={() => handleRegenerate(line, index)}
+                      onRemove={() => handleRemoveSpeaker(index)}
+                      onVoiceChange={(voiceId) => handleVoiceChange(line.speaker, voiceId)}
+                      onGenerate={() => handleGenerateSingle(line, index)}
+                      onDownload={handleDownloadSingle}
+                      emphasize={form.watch('emphasize')}
+                      form={form}
+                    />
+                  ))}
+                </div>
+
+                {(form.watch('script')?.length ?? 0) > 0 && (
+                  <div className="flex justify-end gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleDownloadAll}
+                      disabled={isLoading || !form.watch('script')?.some(line => audioUrls[line.speaker])}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download All Merged
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="flex justify-between mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadAll}
+              disabled={isLoading || !form.watch('script')?.length}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download All Merged
+            </Button>
+
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Volume2 className="mr-2 h-4 w-4" />
+                  Generate Speech
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </TooltipProvider>
   );
 }

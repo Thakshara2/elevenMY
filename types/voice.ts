@@ -3,6 +3,11 @@ export interface Voice {
   name: string;
   preview_url: string;
   category: string;
-  labels?: Record<string, string>;
+  labels?: {
+    gender?: string;
+    accent?: string;
+    age?: string;
+    [key: string]: string | undefined;
+  };
   description?: string;
 }
