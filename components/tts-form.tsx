@@ -552,6 +552,11 @@ export function TTSForm() {
         const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
         setAudioUrls({ single: url });
+
+        toast({
+          title: 'Success',
+          description: 'Speech generated successfully',
+        });
       } else {
         if (!values.script?.length) {
           toast({
@@ -600,15 +605,11 @@ export function TTSForm() {
         
         setAudioUrls(newAudioUrls);
       }
-      
-      toast({
-        title: 'Success',
-        description: 'Audio generated successfully!',
-      });
     } catch (error) {
+      console.error('Error generating speech:', error);
       toast({
         title: 'Error',
-        description: 'Failed to generate audio.',
+        description: error instanceof Error ? error.message : 'Failed to generate speech',
         variant: 'destructive',
       });
     } finally {
@@ -1052,6 +1053,29 @@ export function TTSForm() {
                   )}
                 />
               </div>
+
+              {audioUrls.single && (
+                <div className="flex items-center gap-4 mt-4">
+                  <audio
+                    controls
+                    src={audioUrls.single}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = audioUrls.single;
+                      link.download = 'generated-speech.mp3';
+                      link.click();
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="multiple">
