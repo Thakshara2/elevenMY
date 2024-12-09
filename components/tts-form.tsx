@@ -476,6 +476,18 @@ export function TTSForm() {
     const script = form.getValues('script');
     if (!script) return;
 
+    // Clean up audio URLs for the changed speaker
+    setAudioUrls(prev => {
+      const newUrls = { ...prev };
+      Object.keys(newUrls).forEach(key => {
+        if (key.startsWith(speaker)) {
+          URL.revokeObjectURL(newUrls[key]);
+          delete newUrls[key];
+        }
+      });
+      return newUrls;
+    });
+
     const updatedScript = script.map(line => {
       if (line.speaker === speaker) {
         return { ...line, voiceId };
@@ -527,49 +539,24 @@ export function TTSForm() {
     try {
       setIsLoading(true);
       
-      if (values.mode === 'single') {
-        if (!values.text || !values.voiceId) {
-          toast({
-            title: 'Error',
-            description: 'Please enter text and select a voice for single mode',
-            variant: 'destructive',
-          });
-          return;
-        }
-
-        const processedText = values.emphasize ? values.text.toUpperCase() : values.text;
-        const audioBuffer = await generateSpeech(
-          processedText,
-          values.voiceId,
-          values.apiKey,
-          0.5,
-          1.0,
-          values.model,
-          true,
-          0
-        );
-        
-        const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
-        setAudioUrls({ single: url });
-
-        toast({
-          title: 'Success',
-          description: 'Speech generated successfully',
-        });
-      } else {
+      if (values.mode === 'multiple') {
         if (!values.script?.length) {
           toast({
             title: 'Error',
-            description: 'Please upload a script first',
+            description: 'Please add speakers first',
             variant: 'destructive',
           });
           return;
         }
 
-        const newAudioUrls: Record<string, string> = {};
+        // Clear previous audio URLs
+        setAudioUrls({});
+
+        // Use Array.from to convert entries iterator to array
+        const scriptEntries = Array.from(values.script.entries());
         
-        for (const line of values.script) {
+        // Generate audio for each line in order
+        for (const [index, line] of scriptEntries) {
           if (!line.voiceId) {
             toast({
               title: 'Error',
@@ -580,20 +567,11 @@ export function TTSForm() {
           }
 
           try {
-            const processedText = values.emphasize ? line.text.toUpperCase() : line.text;
-            const audioBuffer = await generateSpeech(
-              processedText,
-              line.voiceId,
-              values.apiKey,
-              line.stability,
-              line.speed,
-              values.model
-            );
-            
-            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-            const url = URL.createObjectURL(blob);
-            newAudioUrls[line.speaker] = url;
+            setCurrentLoadingSpeaker(line.speaker);
+            const audioKey = `${line.speaker}_${index}`;
+            await generateAudioForLine(line, index, audioKey);
           } catch (error) {
+            console.error(`Error generating audio for ${line.speaker}:`, error);
             toast({
               title: 'Error',
               description: `Failed to generate audio for ${line.speaker}`,
@@ -602,8 +580,11 @@ export function TTSForm() {
             return;
           }
         }
-        
-        setAudioUrls(newAudioUrls);
+
+        toast({
+          title: 'Success',
+          description: 'All audio files generated successfully',
+        });
       }
     } catch (error) {
       console.error('Error generating speech:', error);
@@ -613,47 +594,70 @@ export function TTSForm() {
         variant: 'destructive',
       });
     } finally {
+      setCurrentLoadingSpeaker(null);
       setIsLoading(false);
     }
   }
 
+  // Add helper function for generating audio
+  const generateAudioForLine = async (
+    line: {
+      text: string;
+      voiceId: string;
+      speaker: string;
+      stability: number;
+      speed: number;
+      speakerBoost: boolean;
+      style: number;
+    },
+    index: number,
+    audioKey: string
+  ) => {
+    const processedText = form.getValues('emphasize') ? line.text.toUpperCase() : line.text;
+    
+    const audioBuffer = await generateSpeech(
+      processedText,
+      line.voiceId,
+      form.getValues('apiKey'),
+      line.stability,
+      line.speed,
+      form.getValues('model'),
+      line.speakerBoost,
+      line.style
+    );
+    
+    const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    
+    setAudioUrls(prev => ({
+      ...prev,
+      [audioKey]: url
+    }));
+  };
+
   const handleRegenerate = async (line: any, index: number) => {
     try {
       setCurrentLoadingSpeaker(line.speaker);
+      const audioKey = `${line.speaker}_${index}`;
       
-      // Clear previous audio
-      setAudioUrls(prev => {
-        const newUrls = { ...prev };
-        if (newUrls[line.speaker]) {
-          URL.revokeObjectURL(newUrls[line.speaker]);
-          delete newUrls[line.speaker];
-        }
-        return newUrls;
-      });
-
-      const text = form.getValues('emphasize') ? line.text.toUpperCase() : line.text;
+      // Clean up old audio URL before regenerating
+      if (audioUrls[audioKey]) {
+        URL.revokeObjectURL(audioUrls[audioKey]);
+        setAudioUrls(prev => {
+          const newUrls = { ...prev };
+          delete newUrls[audioKey];
+          return newUrls;
+        });
+      }
       
-      const audioBuffer = await generateSpeech(
-        text,
-        line.voiceId,
-        form.getValues('apiKey'),
-        line.stability,
-        line.speed
-      );
+      await generateAudioForLine(line, index, audioKey);
       
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-
-      setAudioUrls(prev => ({
-        ...prev,
-        [line.speaker]: url
-      }));
-
       toast({
         title: 'Success',
         description: `Regenerated audio for ${line.speaker}`,
       });
     } catch (error) {
+      console.error(`Error regenerating audio for ${line.speaker}:`, error);
       toast({
         title: 'Error',
         description: `Failed to regenerate audio for ${line.speaker}`,
@@ -690,48 +694,92 @@ export function TTSForm() {
   const handleDownloadAll = async () => {
     try {
       setIsLoading(true);
-      
       const script = form.getValues('script');
-      if (!script?.every(line => audioUrls[line.speaker])) {
+      if (!script?.length) return;
+
+      // Create an array of audio elements in script order
+      const audioPromises = script.map(async (line, index) => {
+        const audioKey = `${line.speaker}_${index}`;
+        const audioUrl = audioUrls[audioKey];
+        
+        if (!audioUrl) {
+          console.warn(`No audio found for ${line.speaker} at index ${index}`);
+          return null;
+        }
+
+        try {
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error(`Failed to fetch audio for ${line.speaker}`);
+          return await response.arrayBuffer();
+        } catch (error) {
+          console.error(`Error fetching audio for ${line.speaker}:`, error);
+          return null;
+        }
+      });
+
+      // Wait for all audio buffers to be fetched
+      const audioBuffers = await Promise.all(audioPromises);
+      
+      // Filter out null values and concatenate buffers in order
+      const validBuffers = audioBuffers.filter(buffer => buffer !== null) as ArrayBuffer[];
+      
+      if (validBuffers.length === 0) {
         toast({
           title: 'Error',
-          description: 'Please generate all audio files first',
+          description: 'No audio files available to merge. Please generate audio first.',
           variant: 'destructive',
         });
         return;
       }
 
-      // Download all audio files first
-      const audioFiles = await Promise.all(
-        script.map(async (line) => {
-          const response = await fetch(audioUrls[line.speaker]);
-          return await response.blob();
-        })
+      // Merge audio buffers in order
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBufferPromises = validBuffers.map(buffer => 
+        audioContext.decodeAudioData(buffer.slice(0))
       );
-
-      // Combine all blobs
-      const mergedBlob = new Blob(audioFiles, { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(mergedBlob);
       
-      // Trigger download
+      const decodedBuffers = await Promise.all(audioBufferPromises);
+      
+      // Calculate total duration
+      const totalLength = decodedBuffers.reduce((acc, buffer) => acc + buffer.length, 0);
+      
+      // Create output buffer
+      const outputBuffer = audioContext.createBuffer(
+        1, // mono
+        totalLength,
+        decodedBuffers[0].sampleRate
+      );
+      
+      // Copy each buffer to the output
+      let offset = 0;
+      decodedBuffers.forEach(buffer => {
+        outputBuffer.copyToChannel(buffer.getChannelData(0), 0, offset);
+        offset += buffer.length;
+      });
+
+      // Convert to WAV
+      const wavBuffer = audioBufferToWav(outputBuffer);
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'merged_audio.mp3';
+      link.download = 'merged-speech.wav';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Cleanup
       URL.revokeObjectURL(url);
 
       toast({
         title: 'Success',
-        description: 'Merged audio download started',
+        description: 'Audio files merged and downloaded successfully',
       });
     } catch (error) {
+      console.error('Error merging audio:', error);
       toast({
         title: 'Error',
-        description: 'Failed to merge and download audio files',
+        description: 'Failed to merge audio files',
         variant: 'destructive',
       });
     } finally {
@@ -757,50 +805,48 @@ export function TTSForm() {
 
   const handleRemoveSpeaker = (index: number) => {
     const currentScript = form.getValues('script') || [];
+    const removedSpeaker = currentScript[index];
+    
+    // Clean up audio URLs for the removed speaker
+    if (removedSpeaker) {
+      setAudioUrls(prev => {
+        const newUrls = { ...prev };
+        Object.keys(newUrls).forEach(key => {
+          if (key.startsWith(removedSpeaker.speaker)) {
+            URL.revokeObjectURL(newUrls[key]);
+            delete newUrls[key];
+          }
+        });
+        return newUrls;
+      });
+    }
+    
     form.setValue('script', currentScript.filter((_, i) => i !== index));
   };
 
   const handleGenerateSingle = async (line: any, index: number) => {
     try {
       setCurrentLoadingSpeaker(line.speaker);
-      
-      // Create a unique key for this specific line
       const audioKey = `${line.speaker}_${index}`;
       
-      // Clear previous audio for this specific line
-      setAudioUrls(prev => {
-        const newUrls = { ...prev };
-        delete newUrls[audioKey];
-        return newUrls;
-      });
-
-      const text = form.getValues('emphasize') ? line.text.toUpperCase() : line.text;
+      // Clean up old audio URL before generating new one
+      if (audioUrls[audioKey]) {
+        URL.revokeObjectURL(audioUrls[audioKey]);
+        setAudioUrls(prev => {
+          const newUrls = { ...prev };
+          delete newUrls[audioKey];
+          return newUrls;
+        });
+      }
       
-      const audioBuffer = await generateSpeech(
-        text,
-        line.voiceId,
-        form.getValues('apiKey'),
-        line.stability,
-        line.speed,
-        form.getValues('model'),
-        line.speakerBoost,
-        line.style
-      );
+      await generateAudioForLine(line, index, audioKey);
       
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      
-      // Use the unique key when storing the URL
-      setAudioUrls(prev => ({
-        ...prev,
-        [audioKey]: url
-      }));
-
       toast({
         title: 'Success',
         description: `Generated audio for ${line.speaker}`,
       });
     } catch (error) {
+      console.error(`Error generating audio for ${line.speaker}:`, error);
       toast({
         title: 'Error',
         description: `Failed to generate audio for ${line.speaker}`,
@@ -841,6 +887,57 @@ export function TTSForm() {
       return acc;
     }, {} as Record<string, Voice[]>);
   }, [voices]);
+
+  // Add helper function for WAV conversion
+  function audioBufferToWav(buffer: AudioBuffer) {
+    const numChannels = 1;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    
+    const data = buffer.getChannelData(0);
+    const dataLength = data.length * bytesPerSample;
+    const bufferLength = 44 + dataLength;
+    
+    const arrayBuffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(arrayBuffer);
+    
+    // WAV header
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Write audio data
+    floatTo16BitPCM(view, 44, data);
+    
+    return arrayBuffer;
+  }
+
+  function writeString(view: DataView, offset: number, string: string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
+  function floatTo16BitPCM(view: DataView, offset: number, input: Float32Array) {
+    for (let i = 0; i < input.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+  }
 
   return (
     <TooltipProvider>
@@ -1202,16 +1299,24 @@ export function TTSForm() {
               Download All Merged
             </Button>
 
-            <Button type="submit" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              disabled={isLoading || !form.watch('script')?.length}
+              onClick={() => {
+                if (form.watch('mode') === 'multiple') {
+                  form.handleSubmit(onSubmit)();
+                }
+              }}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Generating All...
                 </>
               ) : (
                 <>
                   <Volume2 className="mr-2 h-4 w-4" />
-                  Generate Speech
+                  Generate All
                 </>
               )}
             </Button>
